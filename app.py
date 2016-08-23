@@ -17,20 +17,6 @@ import urllib2
 
 from docopt import docopt
 
-def load_credentials():
-    lines = [line.rstrip('\n') for line in open('credentials.ini')]
-    chars_to_strip = "\'\""
-    for line in lines:
-        if "client_id" in line:
-            client_id = re.findall(r'[\"\']([^\"\']*)[\"\']', line)[0]
-
-        if "client_secret" in line:
-            client_secret = re.findall(r'[\"\']([^\"\']*)[\"\']', line)[0]
-
-        if "client_access_token" in line:
-            client_access_token = re.findall(r'[\"\']([^\"\']*)[\"\']', line)[0]
-    return client_id, client_secret, client_access_token
-
 def song_find(search_query_string, client_access_token='Z1QtoNKtcX4F7ruB2QRaBnOK5n1SZNkOglv75XH7UvOSREikN6FceDaZoQLZBeyq'):
     """Print the lyrics that match the search query."""
     page = 1
