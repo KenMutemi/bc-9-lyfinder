@@ -13,16 +13,29 @@ Options:
 
 import re
 import json
+import socket
 import urllib2
 
 from docopt import docopt
 
-def song_find(search_query_string, client_access_token='Z1QtoNKtcX4F7ruB2QRaBnOK5n1SZNkOglv75XH7UvOSREikN6FceDaZoQLZBeyq'):
-    """Print the lyrics that match the search query."""
-    page = 1
-    querystring = "http://api.genius.com/search?q=" + urllib2.quote(search_query_string) + "&page=" + str(page)
+CLIENT_ACCESS_TOKEN = 'Z1QtoNKtcX4F7ruB2QRaBnOK5n1SZNkOglv75XH7UvOSREikN6FceDaZoQLZBeyq'
+
+def song_find(search_query_string):
+    """Find song lyrics based on search query.
+
+    Parameters
+    ----------
+    search_query_string: str
+    The string to use as a search query.
+
+    Prints
+    -------
+    result: json_obj
+    Result for the parsed response.
+    """
+    querystring = "http://api.genius.com/search?q=" + urllib2.quote(search_query_string) + "&page=1"
     request = urllib2.Request(querystring)
-    request.add_header("Authorization", "Bearer " + client_access_token)
+    request.add_header("Authorization", "Bearer " + CLIENT_ACCESS_TOKEN)
     request.add_header("User-Agent", "curl/7.9.8 (i686-pc-linux-gnu) libcurl 7.9.8 (OpenSSL 0.9.6b) (ipv6 enabled)")
 
     while True:
@@ -37,7 +50,7 @@ def song_find(search_query_string, client_access_token='Z1QtoNKtcX4F7ruB2QRaBnOK
     body = json_obj["response"]["hits"]
    
     for result in body:
-        print(result["result"]["id"])
+        print("{0} - {1} - {2}".format(result["result"]["id"], result["result"]["title"], result["result"]["primary_artist"]["name"]))
 
 def song_view(song_id):
     """Print the lyrics of the song ID provided."""
