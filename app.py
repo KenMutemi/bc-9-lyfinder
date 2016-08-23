@@ -12,6 +12,8 @@ Options:
 """
 
 import re
+import json
+import urllib2
 
 from docopt import docopt
 
@@ -29,10 +31,27 @@ def load_credentials():
             client_access_token = re.findall(r'[\"\']([^\"\']*)[\"\']', line)[0]
     return client_id, client_secret, client_access_token
 
-def song_find(search_query_string):
+def song_find(search_query_string, client_access_token='Z1QtoNKtcX4F7ruB2QRaBnOK5n1SZNkOglv75XH7UvOSREikN6FceDaZoQLZBeyq'):
     """Print the lyrics that match the search query."""
+    page = 1
+    querystring = "http://api.genius.com/search?q=" + urllib2.quote(search_query_string) + "&page=" + str(page)
+    request = urllib2.Request(querystring)
+    request.add_header("Authorization", "Bearer " + client_access_token)
+    request.add_header("User-Agent", "curl/7.9.8 (i686-pc-linux-gnu) libcurl 7.9.8 (OpenSSL 0.9.6b) (ipv6 enabled)")
 
-    print("song find, {0}".format(search_query_string))
+    while True:
+        try:
+            response = urllib2.urlopen(request, timeout=4)
+            raw = response.read()
+        except socket.timeout:
+            print("Timeout")
+            continue
+        break
+    json_obj = json.loads(raw)
+    body = json_obj["response"]["hits"]
+   
+    for result in body:
+        print(result["result"]["id"])
 
 def song_view(song_id):
     """Print the lyrics of the song ID provided."""
