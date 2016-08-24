@@ -17,6 +17,7 @@ import socket
 import urllib2
 
 from docopt import docopt
+from tabulate import tabulate
 
 CLIENT_ACCESS_TOKEN = 'Z1QtoNKtcX4F7ruB2QRaBnOK5n1SZNkOglv75XH7UvOSREikN6FceDaZoQLZBeyq'
 
@@ -48,9 +49,18 @@ def song_find(search_query_string):
         break
     json_obj = json.loads(raw)
     body = json_obj["response"]["hits"]
+
+    lyrics = []
    
     for result in body:
-        print("{0} - {1} - {2}".format(result["result"]["id"], result["result"]["title"], result["result"]["primary_artist"]["name"]))
+        lyric = []
+        lyric.append(result["result"]["id"])
+        lyric.append(result["result"]["title"])
+        lyric.append(result["result"]["primary_artist"]["name"])
+        lyrics.append(lyric)
+    print tabulate(lyrics, ["ID", "Title", "Artist",], tablefmt="fancy_grid")
+
+        #print("{0} - {1} - {2}".format(result["result"]["id"], result["result"]["title"], result["result"]["primary_artist"]["name"]))
 
 def song_view(song_id):
     """Print the lyrics of the song ID provided."""
