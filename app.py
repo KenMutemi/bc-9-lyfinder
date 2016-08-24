@@ -15,10 +15,8 @@ import re
 import json
 import socket
 import urllib2
-import unicodedata
 
 from docopt import docopt
-from pprint import pprint
 from tabulate import tabulate
 
 CLIENT_ACCESS_TOKEN = 'Z1QtoNKtcX4F7ruB2QRaBnOK5n1SZNkOglv75XH7UvOSREikN6FceDaZoQLZBeyq'
