@@ -7,7 +7,7 @@ class Lyric(Base):
     __tablename__ = 'lyrics'
 
     id = Column(Integer, primary_key=True)
-    song_id = Column(String)
+    song_id = Column(String, unique=True)
     title = Column(String)
     artist = Column(String)
     body = Column(String)

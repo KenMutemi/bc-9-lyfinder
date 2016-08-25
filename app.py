@@ -2,6 +2,7 @@
 Lyfinder.
 
 Usage:
+  app.py (-i | --interactive)
   app.py song find <search_query_string>
   app.py song view <song_id>
   app.py song save <song_id>
@@ -21,6 +22,7 @@ from docopt import docopt
 from tabulate import tabulate
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
 
 from pprint import pprint
 
@@ -37,12 +39,6 @@ session = Session()
 
 # Create tables
 Base.metadata.create_all(engine)
-
-def docopt_cmd(func):
-    """ This is a decorator that simplifies the try/except block and passes
-    the result of the docopt parsing to the called action.
-    """
-    pass
 
 def song_find(search_query_string):
     """Find song lyrics based on search query.
@@ -89,6 +85,7 @@ def song_view(song_id):
     referent: json_obj
     Result for the parsed response.
     """
+    
     querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
 
     authorize = Authorize(querystring)
@@ -112,18 +109,26 @@ def song_save(song_id):
     Result for the parsed response.
     """
 
-    querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
+    try:
+        querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
+    
+        authorize = Authorize(querystring)
+        json_obj = authorize.bot()
+        # All anotatable contents on Genius are called referents
+        referents = []
+        for referent in json_obj['response']['referents']:
+            referents.append(referent['fragment'].rstrip())
+        lyric = Lyric(song_id=json_obj['response']['referents'][0]['annotatable']['id'],
+                title=json_obj['response']['referents'][0]['annotatable']['title'],
+                artist=json_obj['response']['referents'][0]['annotatable']['context'],
+                body=str(referents))
+        session.add(lyric)
+        session.commit()
+        print "{0} by {1} has been saved.".format(json_obj['response']['referents'][0]['annotatable']['title'],
+                json_obj['response']['referents'][0]['annotatable']['context'])
 
-    authorize = Authorize(querystring)
-    json_obj = authorize.bot()
-    # All anotatable contents on Genius are called referents
-    referents = []
-    for referent in json_obj['response']['referents']:
-        referents.append(referent['fragment'].rstrip())
-    lyric = Lyric(song_id=json_obj['response']['referents'][0]['annotatable']['id'], title=json_obj['response']['referents'][0]['annotatable']['title'], artist=json_obj['response']['referents'][0]['annotatable']['context'],  body=str(referents))
-    session.add(lyric)
-    session.commit()
-    print "{0} by {1} has been saved.".format(json_obj['response']['referents'][0]['annotatable']['title'], json_obj['response']['referents'][0]['annotatable']['context'])
+    except IntegrityError:
+        print "This song is already saved!"
 
 def song_clear():
     """Delete all the lyrics in local database."""
@@ -134,15 +139,23 @@ def song_clear():
     except:
         db.session.rollback()
 
-class Interactive(cmd.Cmd):
+class Lyfinder(cmd.Cmd):
     intro = 'Welcome to my Lyfinder!'\
             + ' (type help for a list of commands.)'
 
-    promp = 'Lyfinder'
+    prompt = '(Lyfinder) '
     file = None
+    
+    def do_song(self, line):
+        """greet [person]
+        Greet the named person"""
+        print "Song"
     
 if __name__ == '__main__':
     arguments = docopt(__doc__)
+    if arguments['--interactive']:
+        Lyfinder().cmdloop()
+        print(arguments)
 
     # If an argument is was passed, execute its logic
     if arguments['song'] and arguments['find']:
