@@ -17,6 +17,7 @@ import ast
 import json
 import socket
 import urllib2
+import random
 
 from docopt import docopt
 from tabulate import tabulate
@@ -24,10 +25,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 
-from pprint import pprint
-
 from models import Lyric, Base
 from authorize import Authorize
+from helpers import StringFormatter
 
 CLIENT_ACCESS_TOKEN = 'Z1QtoNKtcX4F7ruB2QRaBnOK5n1SZNkOglv75XH7UvOSREikN6FceDaZoQLZBeyq'
 # Make a connection to our SQLite database
@@ -85,6 +85,9 @@ def song_view(song_id):
     referent: json_obj
     Result for the parsed response.
     """
+    # Colors to show in lyrics
+    colors = [StringFormatter.BLUE, StringFormatter.CYAN, StringFormatter.DARKCYAN,
+            StringFormatter.GREEN, StringFormatter.PURPLE, StringFormatter.RED]
 
     if session.query(Lyric.id).filter_by(song_id=song_id).scalar() is not None:
         lyric = session.query(Lyric).filter_by(song_id=song_id).first()
@@ -92,10 +95,11 @@ def song_view(song_id):
         title = lyric.title
         artist = lyric.artist
 
-        print "Showing {0} lyrics perforemed by {1} ".format(title, artist)
+        print "{0}Showing {1} lyrics perforemed by {2} {3}".format(StringFormatter.BOLD, title, artist, StringFormatter.END)
 
         for referent in body:
-            print referent
+            print referent + random.choice(colors)
+        print StringFormatter.END
         
     else:
         querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
@@ -103,8 +107,12 @@ def song_view(song_id):
         json_obj = authorize.bot()
          
         # All anotatable contents on Genius are called referents
+        print "Showing {0} lyrics performed by {1}".format(json_obj['response']['referents'][0]['annotatable']['title'],
+                json_obj['response']['referents'][0]['annotatable']['context'])
+
         for referent in json_obj['response']['referents']:
-            print referent['fragment'].rstrip()
+            print referent['fragment'].rstrip() + random.choice(colors)
+        print StringFormatter.END
             
 def song_save(song_id):
     """Save song lyrics based on the song ID provided.
