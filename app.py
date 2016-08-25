@@ -10,21 +10,22 @@ Usage:
 Options:
   -h, --help    Show this message.
 """
-
-import re
+import cmd
+import sys
 import json
 import socket
 import urllib2
+import contextlib
 
 from docopt import docopt
 from tabulate import tabulate
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 
-
 from pprint import pprint
 
 from models import Lyric, Base
+from authorize import Authorize
 
 CLIENT_ACCESS_TOKEN = 'Z1QtoNKtcX4F7ruB2QRaBnOK5n1SZNkOglv75XH7UvOSREikN6FceDaZoQLZBeyq'
 # Make a connection to our SQLite database
@@ -36,6 +37,12 @@ session = Session()
 
 # Create tables
 Base.metadata.create_all(engine)
+
+def docopt_cmd(func):
+    """ This is a decorator that simplifies the try/except block and passes
+    the result of the docopt parsing to the called action.
+    """
+    pass
 
 def song_find(search_query_string):
     """Find song lyrics based on search query.
@@ -50,26 +57,15 @@ def song_find(search_query_string):
     result: json_obj
     Result for the parsed response.
     """
+
     querystring = "http://api.genius.com/search?q=" + urllib2.quote(search_query_string) + "&page=1"
-    request = urllib2.Request(querystring)
-    request.add_header("Authorization", "Bearer " + CLIENT_ACCESS_TOKEN)
-    request.add_header("User-Agent", "curl/7.9.8 (i686-pc-linux-gnu) libcurl 7.9.8 (OpenSSL 0.9.6b) (ipv6 enabled)")
 
-    while True:
-        try:
-            response = urllib2.urlopen(request, timeout=4)
-            raw = response.read()
-        except socket.timeout:
-            print("Timeout")
-            continue
-        break
-    json_obj = json.loads(raw)
-    body = json_obj["response"]["hits"]
-
+    authorize = Authorize(querystring)
+    body = authorize.bot()
     # Instantiate list to hold all the lyrics search results.
     lyrics = []
    
-    for result in body:
+    for result in body["response"]["hits"]:
         # Append each lyric property to a list and append that
         # list to the lyrics list.
         lyric = []
@@ -94,17 +90,9 @@ def song_view(song_id):
     Result for the parsed response.
     """
     querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
-    request = urllib2.Request(querystring)
-    request.add_header("Authorization", "Bearer " + CLIENT_ACCESS_TOKEN)
-    request.add_header("User-Agent", "curl/7.9.8 (i686-pc-linux-gnu) libcurl 7.9.8 (OpenSSL 0.9.6b) (ipv6 enabled)")
 
-    try:
-        response = urllib2.urlopen(request, timeout=4)
-        raw = response.read()
-    except socket.timeout:
-        pprint("Sorry, timed out. Try again later")
-    
-    json_obj = json.loads(raw)
+    authorize = Authorize(querystring)
+    json_obj = authorize.bot()
     
     # All anotatable contents on Genius are called referents
     for referent in json_obj['response']['referents']:
@@ -113,18 +101,9 @@ def song_view(song_id):
 def song_save(song_id):
 
     querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
-    request = urllib2.Request(querystring)
-    request.add_header("Authorization", "Bearer " + CLIENT_ACCESS_TOKEN)
-    request.add_header("User-Agent", "curl/7.9.8 (i686-pc-linux-gnu) libcurl 7.9.8 (OpenSSL 0.9.6b) (ipv6 enabled)")
 
-    try:
-        response = urllib2.urlopen(request, timeout=4)
-        raw = response.read()
-    except socket.timeout:
-        print("Sorry, timed out. Try again later")
-
-    
-    json_obj = json.loads(raw)
+    authorize = Authorize(querystring)
+    json_obj = authorize.bot()
     # All anotatable contents on Genius are called referents
     referents = []
     for referent in json_obj['response']['referents']:
@@ -132,10 +111,24 @@ def song_save(song_id):
     lyric = Lyric(song_id=json_obj['response']['referents'][0]['annotatable']['id'], title=json_obj['response']['referents'][0]['annotatable']['title'], artist=json_obj['response']['referents'][0]['annotatable']['context'],  body=str(referents))
     session.add(lyric)
     session.commit()
+    print "{0} by {1} has been saved.".format(json_obj['response']['referents'][0]['annotatable']['title'], json_obj['response']['referents'][0]['annotatable']['context'])
 
 def song_clear():
     """Delete all the lyrics in local database."""
-    print("Clear all songs!")
+    try:
+        num_rows_deleted = session.query(Lyric).delete()
+        session.commit()
+        print "{0} lyric(s) deleted!".format(num_rows_deleted)
+    except:
+        db.session.rollback()
+
+class Interactive(cmd.Cmd):
+    intro = 'Welcome to my Lyfinder!'\
+            + ' (type help for a list of commands.)'
+
+    promp = 'Lyfinder'
+    file = None
+    
 
 if __name__ == '__main__':
     arguments = docopt(__doc__)
