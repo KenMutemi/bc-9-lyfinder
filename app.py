@@ -2,6 +2,7 @@
 Lyfinder.
 
 Usage:
+  app.py (-i | --interactive)
   app.py song find <search_query_string>
   app.py song view <song_id>
   app.py song save <song_id>
@@ -11,20 +12,24 @@ Options:
   -h, --help    Show this message.
 """
 
-import re
+import cmd
+import os
+import sys
+import ast
 import json
 import socket
+import random
 import urllib2
 
 from docopt import docopt
 from tabulate import tabulate
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-
-
-from pprint import pprint
+from sqlalchemy.exc import IntegrityError
 
 from models import Lyric, Base
+from authorize import Authorize
+from helpers import StringFormatter
 
 CLIENT_ACCESS_TOKEN = 'Z1QtoNKtcX4F7ruB2QRaBnOK5n1SZNkOglv75XH7UvOSREikN6FceDaZoQLZBeyq'
 # Make a connection to our SQLite database
@@ -50,26 +55,15 @@ def song_find(search_query_string):
     result: json_obj
     Result for the parsed response.
     """
+
     querystring = "http://api.genius.com/search?q=" + urllib2.quote(search_query_string) + "&page=1"
-    request = urllib2.Request(querystring)
-    request.add_header("Authorization", "Bearer " + CLIENT_ACCESS_TOKEN)
-    request.add_header("User-Agent", "curl/7.9.8 (i686-pc-linux-gnu) libcurl 7.9.8 (OpenSSL 0.9.6b) (ipv6 enabled)")
 
-    while True:
-        try:
-            response = urllib2.urlopen(request, timeout=4)
-            raw = response.read()
-        except socket.timeout:
-            print("Timeout")
-            continue
-        break
-    json_obj = json.loads(raw)
-    body = json_obj["response"]["hits"]
-
+    authorize = Authorize(querystring)
+    body = authorize.bot()
     # Instantiate list to hold all the lyrics search results.
     lyrics = []
    
-    for result in body:
+    for result in body["response"]["hits"]:
         # Append each lyric property to a list and append that
         # list to the lyrics list.
         lyric = []
@@ -77,6 +71,8 @@ def song_find(search_query_string):
         lyric.append(result["result"]["title"])
         lyric.append(result["result"]["primary_artist"]["name"])
         lyrics.append(lyric)
+    # Clear console
+    os.system('clear')
     # Tabulate our output...
     print tabulate(lyrics, ["ID", "Title", "Artist",], tablefmt="fancy_grid")
 
@@ -93,52 +89,106 @@ def song_view(song_id):
     referent: json_obj
     Result for the parsed response.
     """
-    querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
-    request = urllib2.Request(querystring)
-    request.add_header("Authorization", "Bearer " + CLIENT_ACCESS_TOKEN)
-    request.add_header("User-Agent", "curl/7.9.8 (i686-pc-linux-gnu) libcurl 7.9.8 (OpenSSL 0.9.6b) (ipv6 enabled)")
+    # Colors to show in lyrics
+    colors = [StringFormatter.BLUE, StringFormatter.CYAN, StringFormatter.DARKCYAN,
+            StringFormatter.GREEN, StringFormatter.PURPLE, StringFormatter.RED]
 
-    try:
-        response = urllib2.urlopen(request, timeout=4)
-        raw = response.read()
-    except socket.timeout:
-        pprint("Sorry, timed out. Try again later")
-    
-    json_obj = json.loads(raw)
-    
-    # All anotatable contents on Genius are called referents
-    for referent in json_obj['response']['referents']:
-        print referent['fragment'].rstrip()
+    if session.query(Lyric.id).filter_by(song_id=song_id).scalar() is not None:
+        lyric = session.query(Lyric).filter_by(song_id=song_id).first()
+        body = ast.literal_eval(lyric.body)
+        title = lyric.title
+        artist = lyric.artist
 
+        os.system('clear')
+
+        print "{0}Showing {1} lyrics perforemed by {2} {3}".format(StringFormatter.BOLD, title, artist, StringFormatter.END)
+
+        for referent in body:
+            print referent + random.choice(colors)
+        print StringFormatter.END
+        
+    else:
+        querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
+        authorize = Authorize(querystring)
+        json_obj = authorize.bot()
+
+        os.system('clear')
+         
+        # All anotatable contents on Genius are called referents
+        print "{0}{1}Showing '{2}' lyrics performed by {3}{4}\n".format(StringFormatter.BOLD,
+                StringFormatter.UNDERLINE,
+                json_obj['response']['referents'][0]['annotatable']['title'],
+                json_obj['response']['referents'][0]['annotatable']['context'],
+                StringFormatter.END)
+
+        for referent in json_obj['response']['referents']:
+            print referent['fragment'].rstrip() + random.choice(colors)
+        print StringFormatter.END
+            
 def song_save(song_id):
+    """Save song lyrics based on the song ID provided.
 
-    querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
-    request = urllib2.Request(querystring)
-    request.add_header("Authorization", "Bearer " + CLIENT_ACCESS_TOKEN)
-    request.add_header("User-Agent", "curl/7.9.8 (i686-pc-linux-gnu) libcurl 7.9.8 (OpenSSL 0.9.6b) (ipv6 enabled)")
+    Parameters
+    ----------
+    song_id: int
+    The integer to use to get the song lyrics.
+
+    Prints
+    -------
+    referent: json_obj
+    Result for the parsed response.
+    """
 
     try:
-        response = urllib2.urlopen(request, timeout=4)
-        raw = response.read()
-    except socket.timeout:
-        print("Sorry, timed out. Try again later")
-
+        querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
     
-    json_obj = json.loads(raw)
-    # All anotatable contents on Genius are called referents
-    referents = []
-    for referent in json_obj['response']['referents']:
-        referents.append(referent['fragment'].rstrip())
-    lyric = Lyric(song_id=json_obj['response']['referents'][0]['annotatable']['id'], title=json_obj['response']['referents'][0]['annotatable']['title'], artist=json_obj['response']['referents'][0]['annotatable']['context'],  body=str(referents))
-    session.add(lyric)
-    session.commit()
+        authorize = Authorize(querystring)
+        json_obj = authorize.bot()
+        # All anotatable contents on Genius are called referents
+        referents = []
+        for referent in json_obj['response']['referents']:
+            referents.append(referent['fragment'].rstrip())
+        lyric = Lyric(song_id=json_obj['response']['referents'][0]['annotatable']['id'],
+                title=json_obj['response']['referents'][0]['annotatable']['title'],
+                artist=json_obj['response']['referents'][0]['annotatable']['context'],
+                body=str(referents))
+        session.add(lyric)
+        session.commit()
+        os.system('clear')
+        print "{0} by {1} has been saved.".format(json_obj['response']['referents'][0]['annotatable']['title'],
+                json_obj['response']['referents'][0]['annotatable']['context'])
+
+    except IntegrityError:
+        print "This song is already saved!"
 
 def song_clear():
     """Delete all the lyrics in local database."""
-    print("Clear all songs!")
+    try:
+        num_rows_deleted = session.query(Lyric).delete()
+        session.commit()
+        os.system('clear')
+        print "{0} lyric(s) deleted!".format(num_rows_deleted)
+    except:
+        db.session.rollback()
 
+class Lyfinder(cmd.Cmd):
+    os.system('clear')
+    intro = 'Welcome to my Lyfinder!'\
+            + ' (type help for a list of commands.)'
+
+    prompt = '(Lyfinder) ~$ '
+    file = None
+    
+    def do_song(self, line):
+        """greet [person]
+        Greet the named person"""
+        print "Song"
+    
 if __name__ == '__main__':
     arguments = docopt(__doc__)
+    if arguments['--interactive']:
+        Lyfinder().cmdloop()
+        print(arguments)
 
     # If an argument is was passed, execute its logic
     if arguments['song'] and arguments['find']:
