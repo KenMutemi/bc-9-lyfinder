@@ -99,6 +99,18 @@ def song_view(song_id):
         print referent['fragment'].rstrip()
 
 def song_save(song_id):
+    """Save song lyrics based on the song ID provided.
+
+    Parameters
+    ----------
+    song_id: int
+    The integer to use to get the song lyrics.
+
+    Prints
+    -------
+    referent: json_obj
+    Result for the parsed response.
+    """
 
     querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
 
@@ -129,7 +141,6 @@ class Interactive(cmd.Cmd):
     promp = 'Lyfinder'
     file = None
     
-
 if __name__ == '__main__':
     arguments = docopt(__doc__)
 
