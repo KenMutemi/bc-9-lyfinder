@@ -13,10 +13,10 @@ Options:
 """
 import cmd
 import sys
+import ast
 import json
 import socket
 import urllib2
-import contextlib
 
 from docopt import docopt
 from tabulate import tabulate
@@ -85,16 +85,27 @@ def song_view(song_id):
     referent: json_obj
     Result for the parsed response.
     """
-    
-    querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
 
-    authorize = Authorize(querystring)
-    json_obj = authorize.bot()
-    
-    # All anotatable contents on Genius are called referents
-    for referent in json_obj['response']['referents']:
-        print referent['fragment'].rstrip()
+    if session.query(Lyric.id).filter_by(song_id=song_id).scalar() is not None:
+        lyric = session.query(Lyric).filter_by(song_id=song_id).first()
+        body = ast.literal_eval(lyric.body)
+        title = lyric.title
+        artist = lyric.artist
 
+        print "Showing {0} lyrics perforemed by {1} ".format(title, artist)
+
+        for referent in body:
+            print referent
+        
+    else:
+        querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
+        authorize = Authorize(querystring)
+        json_obj = authorize.bot()
+         
+        # All anotatable contents on Genius are called referents
+        for referent in json_obj['response']['referents']:
+            print referent['fragment'].rstrip()
+            
 def song_save(song_id):
     """Save song lyrics based on the song ID provided.
 
