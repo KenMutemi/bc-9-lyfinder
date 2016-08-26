@@ -3,23 +3,25 @@ Lyfinder.
 
 Usage:
   app.py (-i | --interactive)
-  app.py song find <search_query_string>
-  app.py song view <song_id>
-  app.py song save <song_id>
-  app.py song clear
+  app.py view song <song_id>
+  app.py find song <search_query_string>
+  app.py save song <song_id>
+  app.py clear
 
 Options:
   -h, --help    Show this message.
 """
+
 import cmd
+import os
 import sys
 import ast
 import json
 import socket
-import urllib2
 import random
+import urllib2
 
-from docopt import docopt
+from docopt import docopt, DocoptExit
 from tabulate import tabulate
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
@@ -29,7 +31,6 @@ from models import Lyric, Base
 from authorize import Authorize
 from helpers import StringFormatter
 
-CLIENT_ACCESS_TOKEN = 'Z1QtoNKtcX4F7ruB2QRaBnOK5n1SZNkOglv75XH7UvOSREikN6FceDaZoQLZBeyq'
 # Make a connection to our SQLite database
 engine = create_engine('sqlite:///lyrics.db', echo=False)
 
@@ -40,138 +41,185 @@ session = Session()
 # Create tables
 Base.metadata.create_all(engine)
 
-def song_find(search_query_string):
-    """Find song lyrics based on search query.
-
-    Parameters
-    ----------
-    search_query_string: str
-    The string to use as a search query.
-
-    Prints
-    -------
-    result: json_obj
-    Result for the parsed response.
+def docopt_cmd(func):
     """
-
-    querystring = "http://api.genius.com/search?q=" + urllib2.quote(search_query_string) + "&page=1"
-
-    authorize = Authorize(querystring)
-    body = authorize.bot()
-    # Instantiate list to hold all the lyrics search results.
-    lyrics = []
-   
-    for result in body["response"]["hits"]:
-        # Append each lyric property to a list and append that
-        # list to the lyrics list.
-        lyric = []
-        lyric.append(result["result"]["id"])
-        lyric.append(result["result"]["title"])
-        lyric.append(result["result"]["primary_artist"]["name"])
-        lyrics.append(lyric)
-    # Tabulate our output...
-    print tabulate(lyrics, ["ID", "Title", "Artist",], tablefmt="fancy_grid")
-
-def song_view(song_id):
-    """View song lyrics based on the song ID provided.
-
-    Parameters
-    ----------
-    song_id: int
-    The integer to use to get the song lyrics.
-
-    Prints
-    -------
-    referent: json_obj
-    Result for the parsed response.
+    This decorator is used to simplify the try/except block and pass the result
+    of the docopt parsing to the called action.
     """
-    # Colors to show in lyrics
-    colors = [StringFormatter.BLUE, StringFormatter.CYAN, StringFormatter.DARKCYAN,
-            StringFormatter.GREEN, StringFormatter.PURPLE, StringFormatter.RED]
+    def fn(self, arg):
+        try:
+            opt = docopt(fn.__doc__, arg)
 
-    if session.query(Lyric.id).filter_by(song_id=song_id).scalar() is not None:
-        lyric = session.query(Lyric).filter_by(song_id=song_id).first()
-        body = ast.literal_eval(lyric.body)
-        title = lyric.title
-        artist = lyric.artist
+        except DocoptExit as e:
+            # The DocoptExit is thrown when the args do not match.
+            # We print a message to the user and the usage block.
 
-        print "{0}Showing {1} lyrics perforemed by {2} {3}".format(StringFormatter.BOLD, title, artist, StringFormatter.END)
+            print('Invalid Command!')
+            print(e)
+            return
 
-        for referent in body:
-            print referent + random.choice(colors)
-        print StringFormatter.END
-        
-    else:
-        querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
-        authorize = Authorize(querystring)
-        json_obj = authorize.bot()
-         
-        # All anotatable contents on Genius are called referents
-        print "Showing {0} lyrics performed by {1}".format(json_obj['response']['referents'][0]['annotatable']['title'],
-                json_obj['response']['referents'][0]['annotatable']['context'])
+        except SystemExit:
+            # The SystemExit exception prints the usage for --help
+            # We do not need to do the print here.
 
-        for referent in json_obj['response']['referents']:
-            print referent['fragment'].rstrip() + random.choice(colors)
-        print StringFormatter.END
-            
-def song_save(song_id):
-    """Save song lyrics based on the song ID provided.
+            return
 
-    Parameters
-    ----------
-    song_id: int
-    The integer to use to get the song lyrics.
+        return func(self, opt)
 
-    Prints
-    -------
-    referent: json_obj
-    Result for the parsed response.
-    """
-
-    try:
-        querystring = "http://api.genius.com/referents?song_id={0}".format(song_id)
-    
-        authorize = Authorize(querystring)
-        json_obj = authorize.bot()
-        # All anotatable contents on Genius are called referents
-        referents = []
-        for referent in json_obj['response']['referents']:
-            referents.append(referent['fragment'].rstrip())
-        lyric = Lyric(song_id=json_obj['response']['referents'][0]['annotatable']['id'],
-                title=json_obj['response']['referents'][0]['annotatable']['title'],
-                artist=json_obj['response']['referents'][0]['annotatable']['context'],
-                body=str(referents))
-        session.add(lyric)
-        session.commit()
-        print "{0} by {1} has been saved.".format(json_obj['response']['referents'][0]['annotatable']['title'],
-                json_obj['response']['referents'][0]['annotatable']['context'])
-
-    except IntegrityError:
-        print "This song is already saved!"
-
-def song_clear():
-    """Delete all the lyrics in local database."""
-    try:
-        num_rows_deleted = session.query(Lyric).delete()
-        session.commit()
-        print "{0} lyric(s) deleted!".format(num_rows_deleted)
-    except:
-        db.session.rollback()
+    fn.__name__ = func.__name__
+    fn.__doc__ = func.__doc__
+    fn.__dict__.update(func.__dict__)
+    return fn
 
 class Lyfinder(cmd.Cmd):
-    intro = 'Welcome to my Lyfinder!'\
+    os.system('clear')
+    intro = 'Welcome to Lyfinder!\n' \
             + ' (type help for a list of commands.)'
 
-    prompt = '(Lyfinder) '
+    prompt = '(Lyfinder) ~$ '
     file = None
+
+    @docopt_cmd
+    def do_find(self, search_query_string):
+        """Usage: find song <search_query_string>"""
+        """Find song lyrics based on search query.
     
-    def do_song(self, line):
-        """greet [person]
-        Greet the named person"""
-        print "Song"
+        Parameters
+        ----------
+        search_query_string: str
+        The string to use as a search query.
+        
+        Prints
+        -------
+        result: json_obj
+        Result for the parsed response.
+        """
     
+        querystring = "http://api.genius.com/search?q=" + urllib2.quote(search_query_string['<search_query_string>']) + "&page=1"
+    
+        authorize = Authorize(querystring)
+        body = authorize.bot()
+        # Instantiate list to hold all the lyrics search results.
+        lyrics = []
+    
+        for result in body["response"]["hits"]:
+            # Append each lyric property to a list and append that
+            # list to the lyrics list.
+            lyric = []
+            lyric.append(result["result"]["id"])
+            lyric.append(result["result"]["title"])
+            lyric.append(result["result"]["primary_artist"]["name"])
+            lyrics.append(lyric)
+        # Clear console
+        os.system('clear')
+        # Tabulate our output...
+        print tabulate(lyrics, ["ID", "Title", "Artist",], tablefmt="fancy_grid")
+
+    @docopt_cmd
+    def do_view(self, song_id):
+        """Usage: view song <song_id>"""
+        """View song lyrics based on the song ID provided.
+    
+        Parameters
+        ---------
+        song_id: int
+        The integer to use to get the song lyrics.
+    
+        Prints
+        -------
+        referent: json_obj
+        Result for the parsed response.
+        """
+        # Colors to show in lyrics
+        colors = [StringFormatter.BLUE, StringFormatter.CYAN, StringFormatter.DARKCYAN,
+                StringFormatter.GREEN, StringFormatter.PURPLE, StringFormatter.RED]
+    
+        if session.query(Lyric.id).filter_by(song_id=song_id['<song_id>']).scalar() is not None:
+            lyric = session.query(Lyric).filter_by(song_id=song_id['<song_id>']).first()
+            body = ast.literal_eval(lyric.body)
+            title = lyric.title
+            artist = lyric.artist
+    
+            os.system('clear')
+
+            print "{0}Showing {1} lyrics perforemed by {2} {3}".format(StringFormatter.BOLD, title, artist, StringFormatter.END)
+    
+            for referent in body:
+                print referent + random.choice(colors)
+            print StringFormatter.END
+            
+        else:
+            querystring = "http://api.genius.com/referents?song_id={0}".format(urllib2.quote(song_id['<song_id>']))
+            authorize = Authorize(querystring)
+            json_obj = authorize.bot()
+    
+            os.system('clear')
+            
+            # All anotatable contents on Genius are called referents
+            print "{0}{1}Showing '{2}' lyrics performed by {3}{4}\n".format(StringFormatter.BOLD,
+                    StringFormatter.UNDERLINE,
+                    json_obj['response']['referents'][0]['annotatable']['title'],
+                    json_obj['response']['referents'][0]['annotatable']['context'],
+                    StringFormatter.END)
+    
+            for referent in json_obj['response']['referents']:
+                print referent['fragment'].rstrip() + random.choice(colors)
+            print StringFormatter.END
+
+    @docopt_cmd
+    def do_save(self, song_id):
+        """Usage: save song <song_id>"""
+
+        """Save song lyrics based on the song ID provided.
+    
+        Parameters
+        ----------
+        song_id: int
+        The integer to use to get the song lyrics.
+    
+        Prints
+        -------
+        referent: json_obj
+        Result for the parsed response.
+        """
+    
+        try:
+            querystring = "http://api.genius.com/referents?song_id={0}".format(urllib2.quote(song_id['<song_id>']))
+        
+            authorize = Authorize(querystring)
+            json_obj = authorize.bot()
+            # All anotatable contents on Genius are called referents
+            referents = []
+            for referent in json_obj['response']['referents']:
+                referents.append(referent['fragment'].rstrip())
+            lyric = Lyric(song_id=json_obj['response']['referents'][0]['annotatable']['id'],
+                    title=json_obj['response']['referents'][0]['annotatable']['title'],
+                    artist=json_obj['response']['referents'][0]['annotatable']['context'],
+                    body=str(referents))
+            session.add(lyric)
+            session.commit()
+            os.system('clear')
+            print "{0} by {1} has been saved.".format(json_obj['response']['referents'][0]['annotatable']['title'],
+                json_obj['response']['referents'][0]['annotatable']['context'])
+    
+        except IntegrityError:
+            print "This song is already saved!"
+
+    @docopt_cmd
+    def do_clear(self, songs):
+        """Usage: clear"""
+
+        """Delete all the lyrics in local database."""
+        try:
+            num_rows_deleted = session.query(Lyric).delete()
+            session.commit()
+            os.system('clear')
+            print "{0} lyric(s) deleted!".format(num_rows_deleted)
+        except:
+            db.session.rollback()
+            
 if __name__ == '__main__':
-    arguments = docopt(__doc__)
+    arguments = docopt(__doc__, sys.argv[1:])
     if arguments['--interactive']:
         Lyfinder().cmdloop()
         print(arguments)
