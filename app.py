@@ -204,7 +204,6 @@ class Lyfinder(cmd.Cmd):
 
             os.system('clear')
 
-            print song_id['<song_id>']
 
             print "{0} by {1} has been saved.".format(json_obj['response']['referents'][0]['annotatable']['title'],
                 json_obj['response']['referents'][0]['annotatable']['context'])
