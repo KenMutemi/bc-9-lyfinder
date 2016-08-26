@@ -224,6 +224,12 @@ class Lyfinder(cmd.Cmd):
             print "{0} lyric(s) deleted!".format(num_rows_deleted)
         except:
             db.session.rollback()
+
+    def do_quit(self, arg):
+        """Quits out of Interactive Mode."""
+
+        print('Bye!')
+        exit()
             
 if __name__ == '__main__':
     arguments = docopt(__doc__, sys.argv[1:])
