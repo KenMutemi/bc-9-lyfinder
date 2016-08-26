@@ -25,7 +25,7 @@ from docopt import docopt, DocoptExit
 from tabulate import tabulate
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, InvalidRequestError
 
 from models import Lyric, Base
 from authorize import Authorize
@@ -133,38 +133,41 @@ class Lyfinder(cmd.Cmd):
         # Colors to show in lyrics
         colors = [StringFormatter.BLUE, StringFormatter.CYAN, StringFormatter.DARKCYAN,
                 StringFormatter.GREEN, StringFormatter.PURPLE, StringFormatter.RED]
-    
-        if session.query(Lyric.id).filter_by(song_id=song_id['<song_id>']).scalar() is not None:
-            lyric = session.query(Lyric).filter_by(song_id=song_id['<song_id>']).first()
-            body = ast.literal_eval(lyric.body)
-            title = lyric.title
-            artist = lyric.artist
-    
-            os.system('clear')
 
-            print "{0}Showing {1} lyrics perforemed by {2} {3}".format(StringFormatter.BOLD, title, artist, StringFormatter.END)
+        try:
     
-            for referent in body:
-                print referent + random.choice(colors)
-            print StringFormatter.END
-            
-        else:
-            querystring = "http://api.genius.com/referents?song_id={0}".format(urllib2.quote(song_id['<song_id>']))
-            authorize = Authorize(querystring)
-            json_obj = authorize.bot()
-    
-            os.system('clear')
-            
-            # All anotatable contents on Genius are called referents
-            print "{0}{1}Showing '{2}' lyrics performed by {3}{4}\n".format(StringFormatter.BOLD,
-                    StringFormatter.UNDERLINE,
-                    json_obj['response']['referents'][0]['annotatable']['title'],
-                    json_obj['response']['referents'][0]['annotatable']['context'],
-                    StringFormatter.END)
-    
-            for referent in json_obj['response']['referents']:
-                print referent['fragment'].rstrip() + random.choice(colors)
-            print StringFormatter.END
+            if session.query(Lyric.id).filter_by(song_id=song_id['<song_id>']).scalar() is not None:
+                lyric = session.query(Lyric).filter_by(song_id=song_id['<song_id>']).first()
+                body = ast.literal_eval(lyric.body)
+                title = lyric.title
+                artist = lyric.artist
+        
+                os.system('clear')
+
+                print "{0}Showing {1} lyrics perforemed by {2} {3}".format(StringFormatter.BOLD, title, artist, StringFormatter.END)
+        
+                for referent in body:
+                    print referent + random.choice(colors)
+                print StringFormatter.END
+                
+            else:
+                querystring = "http://api.genius.com/referents?song_id={0}".format(urllib2.quote(song_id['<song_id>']))
+                authorize = Authorize(querystring)
+                json_obj = authorize.bot()
+        
+                os.system('clear')
+                
+                # All anotatable contents on Genius are called referents
+                print "{0}{1}Showing '{2}' lyrics performed by {3}{4}\n".format(StringFormatter.BOLD,
+                        StringFormatter.UNDERLINE,
+                        json_obj['response']['referents'][0]['annotatable']['title'],
+                        json_obj['response']['referents'][0]['annotatable']['context'],
+                        StringFormatter.END)
+                for referent in json_obj['response']['referents']:
+                    print referent['fragment'].rstrip() + random.choice(colors)
+                print StringFormatter.END
+        except (InvalidRequestError, urllib2.HTTPError):
+            print "That was an invalid request! Please try again."
 
     @docopt_cmd
     def do_save(self, song_id):
@@ -198,11 +201,15 @@ class Lyfinder(cmd.Cmd):
                     body=str(referents))
             session.add(lyric)
             session.commit()
+
             os.system('clear')
+
+            print song_id['<song_id>']
+
             print "{0} by {1} has been saved.".format(json_obj['response']['referents'][0]['annotatable']['title'],
                 json_obj['response']['referents'][0]['annotatable']['context'])
-    
-        except IntegrityError:
+
+        except (IntegrityError, InvalidRequestError):
             print "This song is already saved!"
 
     @docopt_cmd
