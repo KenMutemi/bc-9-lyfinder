@@ -30,7 +30,7 @@
 *  Install the app's backend dependencies. Using a [virtual environment](http://virtualenv.readthedocs.org/en/latest/installation.html) is recommended.
   *  `pip install -r requirements.txt`
 * Run the app
-  *  `python app.py`
+  *  `python app.py --interactive`
   *  Running the command above will open the app in interactive mode.
 
   ```
